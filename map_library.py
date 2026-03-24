@@ -660,7 +660,8 @@ class MapLibrary:
             'no SELECT privilege'  # english
         ]
         is_permission_error = any(kw in msg for kw in permission_keywords)
-        
+
+        # change these variables to a valid email address and link-text to tell the QGIS user who to contact when they don't have the permission for a layer
         email_address = ""
         text_mail_link = ""
         
