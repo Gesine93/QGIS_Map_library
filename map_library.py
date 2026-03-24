@@ -562,6 +562,11 @@ class MapLibrary:
             else:
                 QApplication.restoreOverrideCursor()
                 return
+            
+        if not layer or not layer.isValid():
+                    self.iface.messageBar().pushMessage("Error",
+                        self.tr(u'Loading layer failed. '), 
+                        level = Qgis.Critical)
                 
 
     def add_layer_by_qlr(self, layer_props):
