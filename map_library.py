@@ -20,7 +20,6 @@
  *                                                                         *
  ***************************************************************************/
 """
-
 import ast
 import os.path
 import re
@@ -35,7 +34,7 @@ from qgis.PyQt.QtGui import QIcon, QDesktopServices
 from qgis.PyQt.QtWidgets import QAction, QApplication, QTreeWidget, \
                             QTreeWidgetItem, QMessageBox, QDialogButtonBox, \
                             QCompleter, QFileDialog, QTreeWidgetItemIterator
-from qgis.core import Qgis, QgsMessageLog, QgsProject, QgsLayerDefinition, QgsSettings
+from qgis.core import Qgis, QgsMessageLog, QgsProject, QgsLayerDefinition, QgsSettings, QgsApplication
 from qgis.gui import QgsMessageBar
 
 # Initialize Qt resources from file resources.py
@@ -157,6 +156,9 @@ class MapLibrary:
 
         self.found_items = []
         self.dlgclosed = False
+
+        # error catcher
+        QgsApplication.messageLog().messageReceived.connect(self.errorCatcher)
 
     def read_refresh_interval(self, filename):
         with open(filename, 'r') as f:
@@ -546,19 +548,20 @@ class MapLibrary:
                                           'Map Library')
             finally:
                 QApplication.restoreOverrideCursor()
-        else:
-            QApplication.restoreOverrideCursor()
-            self.iface.messageBar().pushMessage("Error",
-                self.tr(u'Loading layer failed. '), 
-                self.tr(u'Layer provider "') + layer_props['provider'] + \
-                    self.tr(u'" not supported.'), 
-                level = Qgis.Critical)
-            return
 
-        if not layer or not layer.isValid():
-            self.iface.messageBar().pushMessage("Error",
-                self.tr(u'Loading layer failed. '), 
-                level = Qgis.Critical)
+        else:
+            # error message only wehen clicking on layer not on group
+            if layer_props['provider'] != "":
+                QApplication.restoreOverrideCursor()
+                self.iface.messageBar().pushMessage("Error",
+                    self.tr(u'Loading layer failed. '), 
+                    self.tr(u'Layer provider "') + layer_props['provider'] + \
+                        self.tr(u'" not supported.'), 
+                    level = Qgis.Critical)
+                return
+            else:
+                QApplication.restoreOverrideCursor()
+                return
                 
 
     def add_layer_by_qlr(self, layer_props):
@@ -642,6 +645,37 @@ class MapLibrary:
                 #settings.setValue("items", TreeWidget.dataFromChild(
                 #                               self.invisibleRootItem()))
                 #settings.endGroup()
+            
+    def errorCatcher(self, msg, tag, level):
+        # does only work for English and German, other languages have to be added
+        permission_keywords = [
+            'keine Berechtigung', # german
+            'kein SELECT-Recht',  # german  
+            'permission denied',  # english
+            'no SELECT privilege'  # english
+        ]
+        is_permission_error = any(kw in msg for kw in permission_keywords)
+        
+        email_address = ""
+        text_mail_link = ""
+        
+        if email_address and text_mail_link:
+            mailto_link = f"mailto:{email_address}"
+            email_link_html = f'<a href="{mailto_link}">{text_mail_link}</a>'
+            contact_text = f' Please contact {email_link_html}.'
+        else:
+            contact_text = ""
+        
+        try:        
+            selectedItem = self.layerTree.selectedItems()[0]
+            layer_props = self.props_from_tree_item(selectedItem)
+            if tag == 'PostGIS' and is_permission_error:
+                self.iface.messageBar().pushMessage("FEHLER",
+                                                self.tr(u' The layer ' + str(layer_props['name']) + ' could not be loaded because you do not have sufficient privileges.' + contact_text),
+                                                level=Qgis.Warning,
+                                                duration=0)
+        except IndexError:
+            pass
 
     def show_layer_message(self, message, context):
         '''
