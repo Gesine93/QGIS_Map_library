@@ -158,7 +158,7 @@ class MapLibrary:
         self.dlgclosed = False
 
         # error catcher
-        QgsApplication.messageLog().messageReceived.connect(self.errorCatcher)
+        QgsApplication.messageLog().messageReceived.connect(self.message_error_catcher)
 
     def read_refresh_interval(self, filename):
         with open(filename, 'r') as f:
@@ -650,38 +650,54 @@ class MapLibrary:
                 #settings.setValue("items", TreeWidget.dataFromChild(
                 #                               self.invisibleRootItem()))
                 #settings.endGroup()
-            
-    def errorCatcher(self, msg, tag, level):
-        # does only work for English and German, other languages have to be added
-        permission_keywords = [
-            'keine Berechtigung', # german
-            'kein SELECT-Recht',  # german  
-            'permission denied',  # english
-            'no SELECT privilege'  # english
-        ]
-        is_permission_error = any(kw in msg for kw in permission_keywords)
 
-        # change these variables to a valid email address and link-text to tell the QGIS user who to contact when they don't have the permission for a layer
+    def message_error_catcher(self, msg, tag, level):
+        """
+        Slot connected to messageReceived.
+        Delegates to more specific handlers depending on 'tag' or message content.
+        """
+        if tag == 'PostGIS':
+            self.pgsql_error_catcher(msg, level)
+
+    def pgsql_error_catcher(self, msg, level):
+        permission_keywords = [
+            'keine Berechtigung', 'kein SELECT-Recht',
+            'permission denied', 'no SELECT privilege'
+        ]
+        is_permission_error = any(kw.lower() in msg.lower() for kw in permission_keywords)
+
+        # Kontaktinfo
         email_address = ""
         text_mail_link = ""
-        
+
         if email_address and text_mail_link:
             mailto_link = f"mailto:{email_address}"
             email_link_html = f'<a href="{mailto_link}">{text_mail_link}</a>'
-            contact_text = f' Please contact {email_link_html}.'
+            contact_text = self.tr(' Please contact {link}.').format(link=email_link_html)
         else:
             contact_text = ""
-        
-        try:        
-            selectedItem = self.layerTree.selectedItems()[0]
-            layer_props = self.props_from_tree_item(selectedItem)
-            if tag == 'PostGIS' and is_permission_error:
-                self.iface.messageBar().pushMessage("FEHLER",
-                                                self.tr(u' The layer ' + str(layer_props['name']) + ' could not be loaded because you do not have sufficient privileges.' + contact_text),
-                                                level=Qgis.Warning,
-                                                duration=0)
-        except IndexError:
-            pass
+
+        if is_permission_error:
+            try:
+                selectedItem = self.layerTree.selectedItems()[0]
+                layer_props = self.props_from_tree_item(selectedItem)
+
+                message = self.tr(
+                    'The layer {layer} could not be loaded because you do not have sufficient privileges.{contact}'
+                ).format(
+                    layer=layer_props['name'],
+                    contact=contact_text
+                )
+
+                self.iface.messageBar().pushMessage(
+                    self.tr("ERROR"),
+                    message,
+                    level=Qgis.Warning,
+                    duration=0
+                )
+            except IndexError:
+                pass
+
 
     def show_layer_message(self, message, context):
         '''
