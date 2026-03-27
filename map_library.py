@@ -148,7 +148,7 @@ class MapLibrary:
         self.dlg_msg_bar = QgsMessageBar()
         self.dlg.layout().insertWidget(0, self.dlg_msg_bar)
 
-        refresh_interval = self.read_refresh_interval(os.path.join(self.plugin_dir, 'libs', 'libs.json'))
+        refresh_interval = self.read_from_json(os.path.join(self.plugin_dir, 'libs', 'libs.json'),'LibrariesRefreshInterval')
         if refresh_interval is not None:
             self.timer = QTimer()
             self.timer.timeout.connect(self.reload_library)
@@ -160,11 +160,11 @@ class MapLibrary:
         # error catcher
         QgsApplication.messageLog().messageReceived.connect(self.message_error_catcher)
 
-    def read_refresh_interval(self, filename):
+    def read_from_json(self, filename, param):
         with open(filename, 'r') as f:
             data = json.load(f)
-            refresh_interval = data.get('LibrariesRefreshInterval')
-            return refresh_interval
+            value = data.get(param)
+            return value
 
     # noinspection PyMethodMayBeStatic
     def tr(self, message):
@@ -660,20 +660,25 @@ class MapLibrary:
             self.pgsql_error_catcher(msg, level)
 
     def pgsql_error_catcher(self, msg, level):
-        permission_keywords = [
-            'keine Berechtigung', 'kein SELECT-Recht',
-            'permission denied', 'no SELECT privilege'
-        ]
+        keys = ['permission denied', 'no SELECT privilege']
+
+        # Übersetzungen aus self.tr holen
+        translated_keys = [self.tr(k) for k in keys]
+
+        # Keywords kombinieren: Original + übersetzt + typische Teilstrings aus Postgres
+        permission_keywords = set(keys + translated_keys)
+
         is_permission_error = any(kw.lower() in msg.lower() for kw in permission_keywords)
 
         # Kontaktinfo
-        email_address = ""
-        text_mail_link = ""
+        email_address = self.read_from_json(os.path.join(self.plugin_dir, 'libs', 'libs.json'),'email_address')
+        text_mail_link = self.read_from_json(os.path.join(self.plugin_dir, 'libs', 'libs.json'),'text_mail_link')
 
         if email_address and text_mail_link:
             mailto_link = f"mailto:{email_address}"
             email_link_html = f'<a href="{mailto_link}">{text_mail_link}</a>'
-            contact_text = self.tr(' Please contact {link}.').format(link=email_link_html)
+            text = self.tr(" Please contact ")
+            contact_text = f"{text} {email_link_html}."
         else:
             contact_text = ""
 
@@ -681,13 +686,10 @@ class MapLibrary:
             try:
                 selectedItem = self.layerTree.selectedItems()[0]
                 layer_props = self.props_from_tree_item(selectedItem)
+                text_one = self.tr("The layer")
+                text_two = self.tr("could not be loaded because you do not have sufficient privileges")
 
-                message = self.tr(
-                    'The layer {layer} could not be loaded because you do not have sufficient privileges.{contact}'
-                ).format(
-                    layer=layer_props['name'],
-                    contact=contact_text
-                )
+                message = f"{text_one} {layer_props['name']} {text_two}. {contact_text}"
 
                 self.iface.messageBar().pushMessage(
                     self.tr("ERROR"),
