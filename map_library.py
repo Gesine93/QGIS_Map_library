@@ -35,7 +35,7 @@ from qgis.PyQt.QtGui import QIcon, QDesktopServices
 from qgis.PyQt.QtWidgets import QAction, QApplication, QTreeWidget, \
                             QTreeWidgetItem, QMessageBox, QDialogButtonBox, \
                             QCompleter, QFileDialog, QTreeWidgetItemIterator
-from qgis.core import Qgis, QgsMessageLog, QgsProject, QgsLayerDefinition, QgsSettings
+from qgis.core import Qgis, QgsMessageLog, QgsProject, QgsLayerDefinition, QgsSettings, QgsRelation
 from qgis.gui import QgsMessageBar
 
 # Initialize Qt resources from file resources.py
@@ -101,7 +101,8 @@ class MapLibrary:
              "provider",        # QGIS layer provider or `qlr` for qlr files
              "on_select_message",# a message shown when the layer is selected
              "on_load_message",  # a message shown when the layer is loaded
-             "metadata_url"     # presented in lib as well as used as identifier
+             "metadata_url",    # presented in lib as well as used as identifier
+             "relation"         # relation definition for the layer, used to create a relation in QGIS
                                 # for the layer in the QGIS metadata tab
         ]                       # first two items are shown in tree
                                 # rest of the items are hidden
@@ -617,6 +618,10 @@ class MapLibrary:
         
         selectedItem = self.layerTree.selectedItems()[0]
         layer_props = self.props_from_tree_item(selectedItem)
+
+        relation = None
+        if hasattr(selectedItem, "layer_props") and isinstance(selectedItem.layer_props, dict):
+            relation = selectedItem.layer_props.get("relation")
         
         QgsMessageLog.logMessage(u'Adding layer ' + str(layer_props), 
                                           'Map Library')
@@ -629,6 +634,12 @@ class MapLibrary:
 
             if layer_props['on_load_message']:
                 self.show_layer_message(layer_props['on_load_message'], 'load')
+
+        if relation:
+            QTimer.singleShot(
+                1000,
+                lambda: self.create_relation(relation)
+    )
                 
             # we might add something here for a "most recent layers" section
             # this should be persistent between sessions, so added to QgsSettings
@@ -642,6 +653,38 @@ class MapLibrary:
                 #settings.setValue("items", TreeWidget.dataFromChild(
                 #                               self.invisibleRootItem()))
                 #settings.endGroup()
+
+    def create_relation(self, relation_string):
+
+        QgsMessageLog.logMessage(
+        f"create_relation: {relation_string}",
+        "Map Library",
+        Qgis.Info
+    )
+
+        manager = QgsProject.instance().relationManager()
+
+        rel_id, rel_name, referenced_layer, referencing_layer, pk, fk = relation_string.split(";")
+
+        # Bereits vorhanden?
+        if manager.relation(rel_id).isValid():
+            return
+
+        referenced = QgsProject.instance().mapLayersByName(referenced_layer)
+        referencing = QgsProject.instance().mapLayersByName(referencing_layer)
+
+        if not referenced or not referencing:
+            return
+
+        relation = QgsRelation()
+        relation.setId(rel_id)
+        relation.setName(rel_name)
+        relation.setReferencedLayer(referenced[0].id())
+        relation.setReferencingLayer(referencing[0].id())
+        relation.addFieldPair(fk, pk)
+
+        if relation.isValid():
+            manager.addRelation(relation)
 
     def show_layer_message(self, message, context):
         '''
