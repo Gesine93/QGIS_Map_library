@@ -666,7 +666,6 @@ class MapLibrary:
 
         rel_id, rel_name, referenced_layer, referencing_layer, pk, fk = relation_string.split(";")
 
-        # Bereits vorhanden?
         if manager.relation(rel_id).isValid():
             return
 
