@@ -620,11 +620,12 @@ class MapLibrary:
         layer_props = self.props_from_tree_item(selectedItem)
 
         relation = None
-        if hasattr(selectedItem, "layer_props") and isinstance(selectedItem.layer_props, dict):
-            relation = selectedItem.layer_props.get("relation")
+        relation = layer_props.get("relation")
         
         QgsMessageLog.logMessage(u'Adding layer ' + str(layer_props), 
                                           'Map Library')
+
+
         
         if layer_props:
             if layer_props['provider'].lower() == 'qlr':
