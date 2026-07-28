@@ -102,7 +102,7 @@ class MapLibrary:
              "on_select_message",# a message shown when the layer is selected
              "on_load_message",  # a message shown when the layer is loaded
              "metadata_url",    # presented in lib as well as used as identifier
-             "relation"         # relation definition for the layer, used to create a relation in QGIS
+             "relations"        # relation definitions for the layer, used to create relations in QGIS
                                 # for the layer in the QGIS metadata tab
         ]                       # first two items are shown in tree
                                 # rest of the items are hidden
@@ -619,14 +619,15 @@ class MapLibrary:
         selectedItem = self.layerTree.selectedItems()[0]
         layer_props = self.props_from_tree_item(selectedItem)
 
-        relation = None
-        relation = layer_props.get("relation")
+        relations = []
+        relations = layer_props.get("relations", []) or []
         
         QgsMessageLog.logMessage(u'Adding layer ' + str(layer_props), 
                                           'Map Library')
 
-
-        
+        if isinstance(relations, str):
+            relations = relations.split(",")
+      
         if layer_props:
             if layer_props['provider'].lower() == 'qlr':
                 self.add_layer_by_qlr(layer_props)
@@ -636,10 +637,10 @@ class MapLibrary:
             if layer_props['on_load_message']:
                 self.show_layer_message(layer_props['on_load_message'], 'load')
 
-        if relation:
+        if relations:
             QTimer.singleShot(
                 1000,
-                lambda: self.create_relation(relation)
+                lambda: self.create_relations(relations)
     )
                 
             # we might add something here for a "most recent layers" section
@@ -685,6 +686,11 @@ class MapLibrary:
 
         if relation.isValid():
             manager.addRelation(relation)
+
+
+    def create_relations(self, relations):
+        for relation in relations:
+            self.create_relation(relation)
 
     def show_layer_message(self, message, context):
         '''

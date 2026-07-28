@@ -8,7 +8,7 @@
             "description": "Bing satellite",
             "keywords": ["Microsoft"],
             "metadata_url": "https://wikipedia.org/wiki/Bing_Maps",
-            "relation": "id;name;referenced layer;referencing layer;referenced field;refererencing field"
+            "relations": ["id;name;referenced layer;referencing layer;referenced field;refererencing field"]
         },
 
         "Google": {
